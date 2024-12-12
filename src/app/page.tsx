@@ -1,101 +1,185 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+import { useEffect, useState } from "react";
+import ChatSidebar from "./components/unique/ChatSidebar";
+import ChatWindow from "./components/unique/ChatWindow";
+import { useAuthContext } from "@/utils/providers/AuthProvider";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { Toaster as SonnerToaster, toast } from "sonner";
+import { useChatContext } from "@/utils/providers/ChatProvider";
+import { Message } from "@/utils/types/Message";
+import NotificationToast from "./components/unique/NotificationToast";
+import useDevice from "@/utils/hooks/useDevice";
+import dynamic from "next/dynamic";
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+function Home() {
+  const { verifyLogin, loggedUser, switchOnlineStatus } = useAuthContext();
+  const { newMessageSubscription, activeChat } = useChatContext();
+
+  const [sidebarDisplayContent, setSidebarDisplayContent] = useState<
+    "avatar" | "full"
+  >("full");
+
+  const { isLgWidth } = useDevice();
+
+  useEffect(() => {
+    verifyLogin();
+    document.title = "Webchat | Chats";
+  }, []);
+
+  useEffect(() => {
+    let currentStatus: "online" | "offline" = loggedUser?.status as
+      | "online"
+      | "offline";
+    let timeoutId: NodeJS.Timeout;
+
+    function handleVisibilityChange() {
+      if (!loggedUser?.id) return;
+
+      const visibilityState = document.visibilityState;
+      const status =
+        visibilityState === "visible" || visibilityState === "hidden"
+          ? "online"
+          : "offline";
+
+      if (status !== currentStatus) {
+        currentStatus = status;
+
+        if (status === "online") {
+          timeoutId = setTimeout(() => {
+            switchOnlineStatus({ id: loggedUser.id, status });
+          }, 2000);
+        } else {
+          clearTimeout(timeoutId);
+          switchOnlineStatus({ id: loggedUser.id, status });
+        }
+      }
+    }
+
+    function handleTabClose() {
+      if (!loggedUser?.id) return;
+
+      clearTimeout(timeoutId);
+      if (currentStatus !== "offline") {
+        switchOnlineStatus({ id: loggedUser.id, status: "offline" });
+      }
+    }
+
+    handleVisibilityChange();
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleTabClose);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleTabClose);
+      clearTimeout(timeoutId);
+    };
+  }, [loggedUser]);
+
+  function activateNotificationToast(message: Message) {
+    toast(<NotificationToast newMessage={message} />);
+  }
+
+  useEffect(() => {
+    const newMessage = newMessageSubscription?.data?.newMessage;
+    if (
+      newMessage &&
+      newMessage.receiverId === loggedUser?.id &&
+      newMessage.senderId !== loggedUser?.id
+    ) {
+      if (
+        activeChat.users.toString() !==
+          `${newMessage.senderId},${newMessage.receiverId}` &&
+        activeChat.users.reverse().toString() !==
+          `${newMessage.senderId},${newMessage.receiverId}`
+      ) {
+        activateNotificationToast(newMessage);
+      }
+    }
+  }, [newMessageSubscription]);
+
+  if (loggedUser) {
+    return (
+      <div className="flex bg-[#fcedc2] w-screen h-screen">
+        {isLgWidth ? (
+          <div className="w-screen h-screen">
+            <ResizablePanelGroup
+              direction="horizontal"
+              className="w-full h-full"
+            >
+              <ResizablePanel
+                defaultSize={25}
+                maxSize={25}
+                minSize={6.5}
+                onResize={(e) => {
+                  // setCollapsedSize(e);
+                  if (e < 10) {
+                    setSidebarDisplayContent("avatar");
+                  } else {
+                    setSidebarDisplayContent("full");
+                  }
+                }}
+              >
+                <ChatSidebar displayContent={sidebarDisplayContent} />
+              </ResizablePanel>
+              <ResizableHandle
+                withHandle
+                // onDoubleClick={() => setCollapsedSize(25)}
+                title="Drag to resize"
+              />
+              <ResizablePanel
+                defaultSize={75}
+                minSize={25}
+                className="h-screen !overflow-y-auto"
+              >
+                <ChatWindow />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        ) : (
+          <div className="w-full h-full overflow-y-auto">
+            {activeChat.id > 0 ? (
+              <ChatWindow />
+            ) : (
+              <ChatSidebar displayContent={sidebarDisplayContent} />
+            )}
+          </div>
+        )}
+
+        {isLgWidth ? (
+          <SonnerToaster
+            duration={8000}
+            className="lg:block hidden"
+            closeButton
+            toastOptions={{
+              classNames: {
+                toast: "p-0 rounded-none",
+              },
+            }}
+            position="bottom-right"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+        ) : (
+          <SonnerToaster
+            duration={8000}
+            className="block lg:hidden"
+            closeButton
+            toastOptions={{
+              classNames: {
+                toast: "p-0 rounded-none",
+              },
+            }}
+            position="top-center"
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+        )}
+      </div>
+    );
+  }
 }
+
+const HomePage = dynamic(() => Promise.resolve(Home), { ssr: false });
+export default HomePage;
