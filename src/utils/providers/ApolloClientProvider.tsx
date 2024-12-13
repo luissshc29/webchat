@@ -24,7 +24,7 @@ export default function ApolloClientProvider({
 
   const wsLink = new GraphQLWsLink(
     createClient({
-      url: process.env.NEXT_PUBLIC_API_URL as string,
+      url: process.env.NEXT_PUBLIC_API_URL_WS as string,
     })
   );
 
