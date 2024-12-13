@@ -4,6 +4,7 @@ import "./globals.css";
 import ChatProvider from "@/utils/providers/ChatProvider";
 import ApolloClientProvider from "@/utils/providers/ApolloClientProvider";
 import AuthProvider from "@/utils/providers/AuthProvider";
+import { Suspense } from "react";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -39,11 +40,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ApolloClientProvider>
-          <AuthProvider>
-            <ChatProvider>{children}</ChatProvider>
-          </AuthProvider>
-        </ApolloClientProvider>
+        <Suspense>
+          <ApolloClientProvider>
+            <AuthProvider>
+              <ChatProvider>{children}</ChatProvider>
+            </AuthProvider>
+          </ApolloClientProvider>
+        </Suspense>
       </body>
     </html>
   );
